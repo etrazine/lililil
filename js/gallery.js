@@ -1,3 +1,4 @@
+const THUMB_LIMIT = 12;
 let currentPage = 1;
 
 fetch("gallery.json")
