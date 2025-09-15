@@ -1,70 +1,78 @@
 const THUMB_LIMIT = 12;
 let currentPage = 1;
-let allImages = [];
+let parsedImages = [];
 let activeKeyword = "";
 let activeLora = "";
 
-// Load images
+// 1. Load image list and parse metadata
 fetch("gallery.json")
   .then(res => res.json())
-  .then(images => {
-    allImages = images;
+  .then(filenames => Promise.all(filenames.map(parseImageMetadata)))
+  .then(results => {
+    parsedImages = results.filter(Boolean); // Remove failed loads
     renderPage(currentPage);
     setupPagination();
-    populateLoraFilter(); // Load LoRA options
+    populateLoraFilter();
   });
 
-// Render gallery
+// 2. Extract metadata from a single image
+async function parseImageMetadata(filename) {
+  const imgPath = `images/${filename}`;
+  try {
+    const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
+    const rawText = metadata?.parameters || metadata?.UserComment || "";
+
+    return {
+      filename,
+      prompt: rawText.match(/^(.*?)Steps:/s)?.[1]?.trim() || "",
+      checkpoint: rawText.match(/Model:\s*([^\n,]+)/)?.[1]?.trim() || "Unknown",
+      loras: [...rawText.matchAll(/<lora:([\w-]+):/g)].map(m => m[1]) || [],
+    };
+  } catch (e) {
+    console.warn(`Failed to read metadata from ${filename}`, e);
+    return null;
+  }
+}
+
+// 3. Render current page based on filters
 function renderPage(page) {
   const gallery = document.getElementById("gallery");
   gallery.innerHTML = "";
 
-  const filteredImages = allImages.filter(filename => {
-    const meta = filename.toLowerCase();
-    const matchesKeyword = !activeKeyword || meta.includes(activeKeyword.toLowerCase());
-    const matchesLora = !activeLora || meta.includes(activeLora.toLowerCase());
-    return matchesKeyword && matchesLora;
+  const filtered = parsedImages.filter(img => {
+    const keywordMatch = !activeKeyword || img.prompt.toLowerCase().includes(activeKeyword.toLowerCase());
+    const loraMatch = !activeLora || img.loras.includes(activeLora);
+    return keywordMatch && loraMatch;
   });
 
   const start = (page - 1) * THUMB_LIMIT;
   const end = start + THUMB_LIMIT;
-  const pageImages = filteredImages.slice(start, end);
+  const pageItems = filtered.slice(start, end);
 
-  pageImages.forEach(async (filename) => {
-    const imgPath = `images/${filename}`;
-    const thumbPath = `thumbnails/${filename.replace(/\.(png|jpg)$/i, '-thumb.jpg')}`;
+  pageItems.forEach(img => {
+    const thumbPath = `thumbnails/${img.filename.replace(/\.(png|jpg)$/i, '-thumb.jpg')}`;
+    const fullImgPath = `images/${img.filename}`;
 
-    try {
-      const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
-      const rawText = metadata?.parameters || metadata?.UserComment || "";
-
-      const prompt = rawText.match(/^(.*?)Steps:/s)?.[1]?.trim() || "";
-      const checkpoint = rawText.match(/Model:\s*([^\n,]+)/)?.[1]?.trim() || "Unknown";
-      const loras = [...rawText.matchAll(/<lora:([\w-]+):([\d.]+)>/g)].map(m => `${m[1]} (${m[2]})`);
-
-      const div = document.createElement("div");
-      div.className = "thumb";
-      div.innerHTML = `
-        <a href="viewer.html?img=${filename}" target="_blank">
-          <img src="${thumbPath}" alt="${filename}">
-        </a>
-        <p><strong>Checkpoint:</strong> ${checkpoint}</p>
-        <p><strong>LoRA:</strong> ${loras.join(", ") || "None"}</p>
-      `;
-      gallery.appendChild(div);
-    } catch (e) {
-      console.error(`Failed to parse metadata from ${filename}`, e);
-    }
+    const div = document.createElement("div");
+    div.className = "thumb";
+    div.innerHTML = `
+      <a href="viewer.html?img=${img.filename}" target="_blank">
+        <img src="${thumbPath}" alt="${img.filename}">
+      </a>
+      <p><strong>Checkpoint:</strong> ${img.checkpoint}</p>
+      <p><strong>LoRA:</strong> ${img.loras.join(", ") || "None"}</p>
+    `;
+    gallery.appendChild(div);
   });
 
-  setupPagination(filteredImages.length);
+  setupPagination(filtered.length);
 }
 
-// Pagination
-function setupPagination(total = allImages.length) {
-  const totalPages = Math.ceil(total / THUMB_LIMIT);
+// 4. Set up pagination buttons
+function setupPagination(total = parsedImages.length) {
   const pagination = document.getElementById("pagination");
   pagination.innerHTML = "";
+  const totalPages = Math.ceil(total / THUMB_LIMIT);
 
   for (let i = 1; i <= totalPages; i++) {
     const btn = document.createElement("button");
@@ -73,46 +81,33 @@ function setupPagination(total = allImages.length) {
       currentPage = i;
       renderPage(currentPage);
     };
-    if (i === currentPage) {
-      btn.disabled = true;
-    }
+    if (i === currentPage) btn.disabled = true;
     pagination.appendChild(btn);
   }
 }
 
-// Populate the LoRA filter dropdown
-async function populateLoraFilter() {
+// 5. Populate LoRA dropdown
+function populateLoraFilter() {
   const loraSet = new Set();
+  parsedImages.forEach(img => img.loras.forEach(l => loraSet.add(l)));
 
-  for (const filename of allImages) {
-    const imgPath = `images/${filename}`;
-    try {
-      const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
-      const rawText = metadata?.parameters || metadata?.UserComment || "";
-      const matches = [...rawText.matchAll(/<lora:([\w-]+):/g)];
-      matches.forEach(match => loraSet.add(match[1]));
-    } catch (e) {
-      console.warn(`Metadata read failed for ${filename}`);
-    }
-  }
-
-  const loraFilter = document.getElementById("loraFilter");
-  [...loraSet].sort().forEach(lora => {
+  const select = document.getElementById("loraFilter");
+  loraSet.forEach(lora => {
     const option = document.createElement("option");
     option.value = lora;
     option.textContent = lora;
-    loraFilter.appendChild(option);
+    select.appendChild(option);
   });
 }
 
-// Event listeners for filters
-document.getElementById("keywordFilter").addEventListener("input", (e) => {
+// 6. Filter event listeners
+document.getElementById("keywordFilter").addEventListener("input", e => {
   activeKeyword = e.target.value.trim();
   currentPage = 1;
   renderPage(currentPage);
 });
 
-document.getElementById("loraFilter").addEventListener("change", (e) => {
+document.getElementById("loraFilter").addEventListener("change", e => {
   activeLora = e.target.value.trim();
   currentPage = 1;
   renderPage(currentPage);
