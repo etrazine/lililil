@@ -1,4 +1,3 @@
-
 const THUMB_LIMIT = 12;
 let currentPage = 1;
 
@@ -39,12 +38,24 @@ function renderPage(images, page) {
       `;
       gallery.appendChild(div);
     } catch (e) {
-      console.error(`Failed to parse metadata from ${filename}`, e);
+      console.error(\`Failed to parse metadata from \${filename}\`, e);
     }
   });
 }
 
 function setupPagination(images) {
-  const totalPages = Math.ceil(images.length / THUMB_LIMIT
+  const totalPages = Math.ceil(images.length / THUMB_LIMIT);
+  const pagination = document.getElementById("pagination");
+  pagination.innerHTML = "";
+  for (let i = 1; i <= totalPages; i++) {
+    const btn = document.createElement("button");
+    btn.textContent = i;
+    btn.onclick = () => {
+      currentPage = i;
+      renderPage(images, currentPage);
+    };
+    pagination.appendChild(btn);
+  }
+}
 
-                               // Cache busting trigger
+// Cache busting trigger
