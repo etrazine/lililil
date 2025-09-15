@@ -46,3 +46,5 @@ function renderPage(images, page) {
 
 function setupPagination(images) {
   const totalPages = Math.ceil(images.length / THUMB_LIMIT
+
+                               // Cache busting trigger
