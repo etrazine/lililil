@@ -38,8 +38,7 @@ function renderPage(images, page) {
       `;
       gallery.appendChild(div);
     } catch (e) {
-      console.error(\`Failed to parse metadata from \${filename}\`, e);
-    }
+console.error(`Failed to parse metadata from ${filename}`, e);    }
   });
 }
 
