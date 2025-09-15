@@ -1,76 +1,119 @@
-// gallery.v2.js
-
 const THUMB_LIMIT = 12;
 let currentPage = 1;
+let allImages = [];
+let activeKeyword = "";
+let activeLora = "";
 
+// Load images
 fetch("gallery.json")
   .then(res => res.json())
   .then(images => {
-    renderPage(images, currentPage);
-    setupPagination(images);
+    allImages = images;
+    renderPage(currentPage);
+    setupPagination();
+    populateLoraFilter(); // Load LoRA options
   });
 
-function renderPage(images, page) {
+// Render gallery
+function renderPage(page) {
   const gallery = document.getElementById("gallery");
   gallery.innerHTML = "";
+
+  const filteredImages = allImages.filter(filename => {
+    const meta = filename.toLowerCase();
+    const matchesKeyword = !activeKeyword || meta.includes(activeKeyword.toLowerCase());
+    const matchesLora = !activeLora || meta.includes(activeLora.toLowerCase());
+    return matchesKeyword && matchesLora;
+  });
+
   const start = (page - 1) * THUMB_LIMIT;
   const end = start + THUMB_LIMIT;
-  const pageImages = images.slice(start, end);
+  const pageImages = filteredImages.slice(start, end);
 
   pageImages.forEach(async (filename) => {
     const imgPath = `images/${filename}`;
     const thumbPath = `thumbnails/${filename.replace(/\.(png|jpg)$/i, '-thumb.jpg')}`;
-    const viewLink = `viewer.html?img=${encodeURIComponent(filename)}`;
 
     try {
       const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
       const rawText = metadata?.parameters || metadata?.UserComment || "";
 
-      const prompt = rawText.match(/^(.*?)Steps:/s)?.[1]?.trim() || "No prompt";
+      const prompt = rawText.match(/^(.*?)Steps:/s)?.[1]?.trim() || "";
       const checkpoint = rawText.match(/Model:\s*([^\n,]+)/)?.[1]?.trim() || "Unknown";
-      const loras = [...rawText.matchAll(/<lora:([\w-]+):([\d.]+)>/g)]
-        .map(m => `${m[1]} (${m[2]})`)
-        .join(', ') || "None";
+      const loras = [...rawText.matchAll(/<lora:([\w-]+):([\d.]+)>/g)].map(m => `${m[1]} (${m[2]})`);
 
       const div = document.createElement("div");
       div.className = "thumb";
       div.innerHTML = `
-        <a href="${viewLink}" target="_blank">
+        <a href="viewer.html?img=${filename}" target="_blank">
           <img src="${thumbPath}" alt="${filename}">
         </a>
         <p><strong>Checkpoint:</strong> ${checkpoint}</p>
-        <p><strong>LoRA:</strong> ${loras}</p>
-        <button class="toggle-prompt">Show Prompt</button>
-        <div class="prompt-text" style="display: none;">
-          <p><strong>Prompt:</strong> ${prompt}</p>
-        </div>
+        <p><strong>LoRA:</strong> ${loras.join(", ") || "None"}</p>
       `;
       gallery.appendChild(div);
-
-      // Add toggle functionality
-      div.querySelector(".toggle-prompt").addEventListener("click", () => {
-        const promptBox = div.querySelector(".prompt-text");
-        const isVisible = promptBox.style.display === "block";
-        promptBox.style.display = isVisible ? "none" : "block";
-      });
-
     } catch (e) {
       console.error(`Failed to parse metadata from ${filename}`, e);
     }
   });
+
+  setupPagination(filteredImages.length);
 }
 
-function setupPagination(images) {
-  const totalPages = Math.ceil(images.length / THUMB_LIMIT);
+// Pagination
+function setupPagination(total = allImages.length) {
+  const totalPages = Math.ceil(total / THUMB_LIMIT);
   const pagination = document.getElementById("pagination");
   pagination.innerHTML = "";
+
   for (let i = 1; i <= totalPages; i++) {
     const btn = document.createElement("button");
     btn.textContent = i;
     btn.onclick = () => {
       currentPage = i;
-      renderPage(images, currentPage);
+      renderPage(currentPage);
     };
+    if (i === currentPage) {
+      btn.disabled = true;
+    }
     pagination.appendChild(btn);
   }
 }
+
+// Populate the LoRA filter dropdown
+async function populateLoraFilter() {
+  const loraSet = new Set();
+
+  for (const filename of allImages) {
+    const imgPath = `images/${filename}`;
+    try {
+      const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
+      const rawText = metadata?.parameters || metadata?.UserComment || "";
+      const matches = [...rawText.matchAll(/<lora:([\w-]+):/g)];
+      matches.forEach(match => loraSet.add(match[1]));
+    } catch (e) {
+      console.warn(`Metadata read failed for ${filename}`);
+    }
+  }
+
+  const loraFilter = document.getElementById("loraFilter");
+  [...loraSet].sort().forEach(lora => {
+    const option = document.createElement("option");
+    option.value = lora;
+    option.textContent = lora;
+    loraFilter.appendChild(option);
+  });
+}
+
+// Event listeners for filters
+document.getElementById("keywordFilter").addEventListener("input", (e) => {
+  activeKeyword = e.target.value.trim();
+  currentPage = 1;
+  renderPage(currentPage);
+});
+
+document.getElementById("loraFilter").addEventListener("change", (e) => {
+  activeLora = e.target.value.trim();
+  currentPage = 1;
+  renderPage(currentPage);
+});
