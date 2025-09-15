@@ -1,3 +1,4 @@
+
 const THUMB_LIMIT = 12;
 let currentPage = 1;
 
@@ -44,16 +45,4 @@ function renderPage(images, page) {
 }
 
 function setupPagination(images) {
-  const totalPages = Math.ceil(images.length / THUMB_LIMIT);
-  const pagination = document.getElementById("pagination");
-  pagination.innerHTML = "";
-  for (let i = 1; i <= totalPages; i++) {
-    const btn = document.createElement("button");
-    btn.textContent = i;
-    btn.onclick = () => {
-      currentPage = i;
-      renderPage(images, currentPage);
-    };
-    pagination.appendChild(btn);
-  }
-}`
+  const totalPages = Math.ceil(images.length / THUMB_LIMIT
