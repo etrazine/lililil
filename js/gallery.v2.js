@@ -19,27 +19,30 @@ function renderPage(images, page) {
     const imgPath = `images/${filename}`;
     const thumbPath = `thumbnails/${filename.replace(/\.(png|jpg)$/i, '-thumb.jpg')}`;
 
-    try {
-      const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
-      console.log("Metadata for", filename, metadata);
-      const rawText = metadata?.parameters || metadata?.UserComment || "";
-      const prompt = rawText.match(/Prompt:(.*?)Steps:/s)?.[1]?.trim() || "No prompt";
-      const checkpoint = rawText.match(/Model hash:.*?\n(.*)/)?.[1]?.trim() || "Unknown";
-      const loras = [...rawText.matchAll(/<lora:(.*?):([\d.]+)>/g)].map(m => `${m[1]} (${m[2]})`).join(', ') || "None";
+try {
+  const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
+  const rawText = metadata?.parameters || metadata?.UserComment || "";
 
-      const div = document.createElement("div");
-      div.className = "thumb";
-      div.innerHTML = `
-        <a href="${imgPath}" target="_blank">
-          <img src="${thumbPath}" alt="${filename}">
-        </a>
-        <p><strong>Prompt:</strong> ${prompt}</p>
-        <p><strong>Checkpoint:</strong> ${checkpoint}</p>
-        <p><strong>LoRA:</strong> ${loras}</p>
-      `;
-      gallery.appendChild(div);
-    } catch (e) {
-console.error(`Failed to parse metadata from ${filename}`, e);    }
+  const prompt = rawText.match(/^(.*?)Steps:/s)?.[1]?.trim() || "No prompt";
+  const checkpoint = rawText.match(/Model:\s*([^\n,]+)/)?.[1]?.trim() || "Unknown";
+  const loras = [...rawText.matchAll(/<lora:([\w-]+):([\d.]+)>/g)]
+    .map(m => `${m[1]} (${m[2]})`)
+    .join(', ') || "None";
+
+  const div = document.createElement("div");
+  div.className = "thumb";
+  div.innerHTML = `
+    <a href="${imgPath}" target="_blank">
+      <img src="${thumbPath}" alt="${filename}">
+    </a>
+    <p><strong>Prompt:</strong> ${prompt}</p>
+    <p><strong>Checkpoint:</strong> ${checkpoint}</p>
+    <p><strong>LoRA:</strong> ${loras}</p>
+  `;
+  gallery.appendChild(div);
+} catch (e) {
+  console.error(`Failed to parse metadata from ${filename}`, e);
+}
   });
 }
 
