@@ -21,6 +21,7 @@ function renderPage(images, page) {
 
     try {
       const metadata = await exifr.parse(imgPath, { tiff: true, xmp: true, userComment: true });
+      console.log("Metadata for", filename, metadata);
       const rawText = metadata?.parameters || metadata?.UserComment || "";
       const prompt = rawText.match(/Prompt:(.*?)Steps:/s)?.[1]?.trim() || "No prompt";
       const checkpoint = rawText.match(/Model hash:.*?\n(.*)/)?.[1]?.trim() || "Unknown";
