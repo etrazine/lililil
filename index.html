@@ -1,13 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Prompt Gallery</title>
   <link rel="stylesheet" href="css/style.css" />
   <script src="js/exifr.min.js"></script>
-  <script src="js/gallery.v3.js" defer></script></head>
+  <script src="js/gallery.v2.js" defer></script>
+</head>
 <body>
   <h1>Prompt Gallery</h1>
+
+  <div style="margin-bottom: 1rem;">
+    <input type="text" id="keywordFilter" placeholder="Filter by keyword..." />
+    <select id="loraFilter">
+      <option value="">All LoRAs</option>
+    </select>
+  </div>
+
   <div id="gallery"></div>
   <div id="pagination"></div>
 </body>
