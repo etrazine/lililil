@@ -3,25 +3,24 @@ const input = document.getElementById("image-input");
 const preview = document.getElementById("preview");
 const status = document.getElementById("status");
 
+// Preview selected images
 input.addEventListener("change", () => {
   preview.innerHTML = "";
   const files = input.files;
-
   if (!files.length) return;
 
-  Array.from(files)
-    .slice(0, 10)
-    .forEach(file => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const img = document.createElement("img");
-        img.src = e.target.result;
-        preview.appendChild(img);
-      };
-      reader.readAsDataURL(file);
-    });
+  Array.from(files).slice(0, 10).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.createElement("img");
+      img.src = e.target.result;
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
 });
 
+// Upload handler
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const files = input.files;
@@ -46,13 +45,14 @@ form.addEventListener("submit", async (e) => {
 
     const data = await res.json();
 
-    if (res.ok) {
-      status.textContent = `✅ Uploaded ${data.uploaded.length} file(s) successfully.`;
+    if (res.ok && data.uploaded) {
+      status.textContent = `Upload successful: ${data.uploaded.length} file(s).`;
     } else {
-      status.textContent = `❌ Upload failed: ${data.error || res.statusText}`;
+      status.textContent = `Upload failed: ${data.error || res.statusText}`;
+      console.error("Upload failed response:", data);
     }
   } catch (err) {
-    console.error("Upload error", err);
-    status.textContent = "❌ An unexpected error occurred during upload.";
+    console.error("Upload error:", err);
+    status.textContent = "An unexpected error occurred during upload.";
   }
 });
