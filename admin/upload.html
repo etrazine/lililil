@@ -2,21 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Upload Images</title>
+  <link rel="stylesheet" href="/css/style.css" />
   <style>
     body {
       font-family: sans-serif;
       margin: 2rem;
     }
-
     .preview-grid {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin-bottom: 20px;
     }
-
     .preview-grid img {
       max-width: 150px;
       max-height: 150px;
@@ -24,7 +23,6 @@
       border: 1px solid #ccc;
       padding: 4px;
     }
-
     #status {
       margin-top: 1rem;
       font-weight: bold;
@@ -41,75 +39,6 @@
   <div class="preview-grid" id="preview"></div>
   <div id="status"></div>
 
-  <script>
-    const form = document.getElementById("upload-form");
-    const input = document.getElementById("image-input");
-    const preview = document.getElementById("preview");
-    const status = document.getElementById("status");
-
-    // Preview selected images
-    input.addEventListener("change", () => {
-      preview.innerHTML = "";
-      const files = input.files;
-      if (!files.length) return;
-
-      Array.from(files).slice(0, 10).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          const img = document.createElement("img");
-          img.src = e.target.result;
-          preview.appendChild(img);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    // Upload handler
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const files = input.files;
-      if (!files.length) {
-        status.textContent = "Please select at least one image.";
-        return;
-      }
-
-      const uploaded = [];
-      status.textContent = "Uploading...";
-
-      for (const file of Array.from(files).slice(0, 10)) {
-        try {
-          const reader = new FileReader();
-          const result = await new Promise((resolve, reject) => {
-            reader.onload = () => resolve(reader.result.split(",")[1]); // base64
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-
-          const res = await fetch("/.netlify/functions/upload-blob-upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: file.name, content: result })
-          });
-
-          const data = await res.json();
-          if (res.ok) {
-            uploaded.push(data.filename);
-          } else {
-            console.error("Upload failed", data);
-            status.textContent = `Upload failed: ${data.error || res.statusText}`;
-            return;
-          }
-        } catch (err) {
-          console.error("Upload error", err);
-          status.textContent = `Error uploading ${file.name}: ${err.message}`;
-          return;
-        }
-      }
-
-      status.textContent = `Upload complete: ${uploaded.length} file(s) uploaded.`;
-      form.reset();
-      preview.innerHTML = "";
-    });
-  </script>
+  <script src="upload.js"></script>
 </body>
 </html>
