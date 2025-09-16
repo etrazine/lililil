@@ -1,6 +1,6 @@
 import { blobs } from '@netlify/blobs';
 
-export default async (req, context) => {
+export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
 
   if (req.method !== 'POST') {
@@ -39,7 +39,7 @@ export default async (req, context) => {
       await blobs.set(filename, buffer, {
         metadata: {
           contentType: file.type,
-        }
+        },
       });
 
       uploaded.push(filename);
