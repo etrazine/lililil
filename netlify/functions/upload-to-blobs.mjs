@@ -34,44 +34,38 @@ export default async (req) => {
     const uploaded = [];
 
     for (const file of images) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
+      // file is already a Blob/File in Edge Functions
       // Generate a unique filename to avoid overwriting existing blobs
       const timestamp = Date.now();
       const randomSuffix = Math.random().toString(36).substring(2, 8);
-      const extension = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
-      const baseName = file.name.replace(/\.[^/.]+$/, "");
+      const extension = file.name && file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
+      const baseName = file.name ? file.name.replace(/\.[^/.]+$/, "") : 'upload';
       const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
 
-      await blobs.set(uniqueFilename, buffer, {
+      await blobs.set(uniqueFilename, file, {
         metadata: {
           contentType: file.type,
         },
       });
 
       uploaded.push(uniqueFilename);
-      uploaded.push(filename);
     }
+
+    return new Response(JSON.stringify({ uploaded }), {
+      status: 200,
+      headers: jsonHeaders,
+    });
 
   } catch (err) {
     if (process.env.NODE_ENV === 'development') {
       console.error("Blob upload error:", err);
     }
     return new Response(
-      JSON.stringify(
-        process.env.NODE_ENV === 'development'
-    return new Response(JSON.stringify({ error: 'Upload failed', details: err?.message || String(err) }), {
-      status: 500,
-      headers: jsonHeaders,
-    });
+      JSON.stringify({ error: 'Upload failed', details: err?.message || String(err) }),
+      {
         status: 500,
         headers: jsonHeaders,
       }
     );
-  }
-    return new Response(JSON.stringify({ error: 'Upload failed', details: err.message }), {
-      status: 500,
-      headers: jsonHeaders,
-    });
   }
 };
