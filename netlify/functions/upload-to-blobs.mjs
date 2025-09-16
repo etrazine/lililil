@@ -1,11 +1,4 @@
-// netlify/functions/upload-to-blobs.mjs
-import { createClient } from '@netlify/blobs';
-
-const blobs = createClient();
-
-function normalizeBaseName(filename) {
-  return filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
-}
+import blobs from '@netlify/blobs';
 
 export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -18,9 +11,9 @@ export default async (req) => {
   }
 
   try {
-    const contentType = req.headers.get('content-type') || '';
-    if (!contentType.includes('multipart/form-data')) {
-      return new Response(JSON.stringify({ error: 'Expected multipart/form-data' }), {
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return new Response(JSON.stringify({ error: "Expected multipart/form-data" }), {
         status: 400,
         headers: jsonHeaders,
       });
@@ -35,40 +28,61 @@ export default async (req) => {
       });
     }
 
-    const images = formData.getAll("images");
-    if (!images.length) {
-      return new Response(JSON.stringify({ error: "No images uploaded" }), {
+    const files = formData.getAll("images");
+    if (!files || files.length === 0) {
+      return new Response(JSON.stringify({ error: "No files found in 'images' field" }), {
         status: 400,
         headers: jsonHeaders,
       });
     }
 
+    // Helper: sanitize and normalize filename
+    const normalizeBaseName = (filename) =>
+      filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, "_");
+
+    // Helper: secure random suffix
+    const generateRandomSuffix = () => {
+      const bytes = new Uint8Array(6);
+      (globalThis.crypto || require("crypto").webcrypto).getRandomValues(bytes);
+      return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    };
+
     const uploaded = [];
 
-    await Promise.all(
-      images.map(async (file) => {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const randomSuffix = Math.random().toString(36).substring(2, 8);
-          const extension = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
-          const baseName = normalizeBaseName(file.name);
-          const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
+    // Upload all files in parallel and handle errors per file
+    await Promise.all(files.map(async (file) => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const baseName = normalizeBaseName(file.name || "upload");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const suffix = generateRandomSuffix();
+        const extension = file.name?.includes(".")
+          ? file.name.substring(file.name.lastIndexOf("."))
+          : "";
+        const uniqueName = `${baseName}_${timestamp}_${suffix}${extension}`;
 
-          await blobs.set(uniqueFilename, arrayBuffer, {
-            metadata: {
-              contentType: file.type,
-            },
-          });
+        await blobs.set(uniqueName, arrayBuffer, {
+          metadata: { contentType: file.type },
+        });
 
-          uploaded.push(uniqueFilename);
-        } catch (fileErr) {
-          uploaded.push({ file: file.name || 'unknown', error: fileErr.message });
-        }
-      })
-    );
+        uploaded.push(uniqueName);
+      } catch (err) {
+        console.error("Failed to upload file:", {
+          filename: file.name,
+          error: err,
+          time: new Date().toISOString(),
+        });
+      }
+    }));
 
-    return new Response(JSON.stringify({ uploaded }), {
+    if (uploaded.length === 0) {
+      return new Response(JSON.stringify({ error: "All uploads failed" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, uploaded }), {
       status: 200,
       headers: jsonHeaders,
     });
@@ -77,16 +91,11 @@ export default async (req) => {
     console.error("Blob upload error:", {
       error: err,
       method: req.method,
-      headers: Object.fromEntries(req.headers.entries()),
       time: new Date().toISOString(),
     });
-
-    return new Response(JSON.stringify({
-      error: 'Upload failed',
-      details: err.message || String(err)
-    }), {
-      status: 500,
-      headers: jsonHeaders,
-    });
+    return new Response(
+      JSON.stringify({ error: "Upload failed", details: err.message }),
+      { status: 500, headers: jsonHeaders }
+    );
   }
 };
