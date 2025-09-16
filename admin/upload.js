@@ -39,7 +39,7 @@ uploadBtn.addEventListener("click", async () => {
         reader.onload = async e => {
           const base64Data = e.target.result.split(',')[1];
 
-          const response = await fetch("/.netlify/functions/handle-blob-upload", {
+          const response = await fetch("/.netlify/functions/upload-blob-upload", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"

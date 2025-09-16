@@ -85,7 +85,7 @@
             reader.readAsDataURL(file);
           });
 
-          const res = await fetch("/.netlify/functions/handle-blob-upload", {
+          const res = await fetch("/.netlify/functions/upload-blob-upload", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: file.name, content: result })
