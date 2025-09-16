@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload New Image</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+      max-width: 600px;
+      margin: auto;
+    }
+    input[type="file"] {
+      margin-bottom: 1rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Upload a new image</h1>
+  <form id="upload-form" enctype="multipart/form-data">
+    <input type="file" name="image" accept="image/png" required />
+    <br />
+    <button type="submit">Upload</button>
+  </form>
+
+  <div id="status"></div>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const status = document.getElementById('status');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const res = await fetch('/.netlify/functions/upload-image', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await res.text();
+      status.innerText = result;
+      form.reset();
+    });
+  </script>
+</body>
+</html>
