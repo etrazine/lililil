@@ -1,19 +1,10 @@
-// netlify/functions/upload-to-blobs.mjs
-import { set } from "@netlify/blobs";
+import { setBlob } from "@netlify/blobs";
 
-// Helper: normalize filenames
 function normalizeBaseName(filename) {
   return filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
 }
 
-// Helper: ISO timestamp (sortable, readable)
-function formatDate() {
-  const now = new Date();
-  return now.toISOString().replace(/[-:T]/g, '').slice(0, 15); // YYYYMMDDTHHmmss
-}
-
-// Helper: secure random suffix
-function generateSecureSuffix() {
+function generateRandomSuffix() {
   const randomBytes = new Uint8Array(6);
   (globalThis.crypto || require('crypto').webcrypto).getRandomValues(randomBytes);
   return Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -39,6 +30,7 @@ export default async (req) => {
     }
 
     const formData = await req.formData();
+
     if (!formData.has('images')) {
       return new Response(JSON.stringify({ error: "Expected form field 'images'" }), {
         status: 400,
@@ -48,36 +40,35 @@ export default async (req) => {
 
     const images = formData.getAll('images');
     if (!images.length) {
-      return new Response(JSON.stringify({ error: 'No images uploaded' }), {
+      return new Response(JSON.stringify({ error: "No files uploaded." }), {
         status: 400,
         headers: jsonHeaders,
       });
     }
 
-    const results = await Promise.all(images.map(async (file) => {
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const extension = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
-        const baseName = normalizeBaseName(file.name || 'upload');
-        const isoTime = formatDate();
-        const randomSuffix = generateSecureSuffix();
-        const uniqueFilename = `${baseName}-${isoTime}-${randomSuffix}${extension}`;
+    const uploaded = [];
 
-        await set(uniqueFilename, arrayBuffer, {
-          metadata: { contentType: file.type },
-        });
+    // Upload in parallel
+    const uploadPromises = images.map(async (file) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const contentType = file.type;
+      const baseName = normalizeBaseName(file.name || `upload`);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const randomSuffix = generateRandomSuffix();
+      const extension = file.name?.match(/\.[^/.]+$/)?.[0] || '';
+      const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
 
-        return { file: file.name, storedAs: uniqueFilename };
-      } catch (err) {
-        return { file: file.name || 'unknown', error: err.message };
-      }
-    }));
+      await setBlob(uniqueFilename, arrayBuffer, {
+        metadata: { contentType }
+      });
 
-    const success = results.filter(r => !r.error);
-    const failed = results.filter(r => r.error);
+      uploaded.push(uniqueFilename);
+    });
 
-    return new Response(JSON.stringify({ success, failed }), {
-      status: failed.length ? 207 : 200, // 207 = Multi-Status
+    await Promise.all(uploadPromises);
+
+    return new Response(JSON.stringify({ uploaded }), {
+      status: 200,
       headers: jsonHeaders,
     });
 
@@ -85,15 +76,16 @@ export default async (req) => {
     console.error("Blob upload error:", {
       error: err,
       method: req.method,
-      headers: Object.fromEntries([...req.headers.entries()].map(([k, v]) => [k, k.toLowerCase().includes('auth') ? '[FILTERED]' : v])),
+      headers: Object.fromEntries(req.headers.entries()),
       time: new Date().toISOString(),
     });
-    return new Response(
-      JSON.stringify({ error: 'Upload failed', details: err?.message || String(err) }),
-      {
-        status: 500,
-        headers: jsonHeaders,
-      }
-    );
+
+    return new Response(JSON.stringify({
+      error: 'Upload failed',
+      details: err?.message || String(err)
+    }), {
+      status: 500,
+      headers: jsonHeaders,
+    });
   }
 };
