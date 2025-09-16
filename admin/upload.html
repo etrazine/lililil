@@ -1,28 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Upload Images</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="/css/style.css">
   <style>
     body {
       font-family: sans-serif;
-      max-width: 800px;
-      margin: 2rem auto;
-      padding: 1rem;
+      margin: 2rem;
     }
-    #preview img {
-      width: 100px;
-      margin: 5px;
+
+    .preview-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .preview-grid img {
+      max-width: 150px;
+      max-height: 150px;
+      object-fit: cover;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 4px;
     }
-    #uploadBtn {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-    }
+
     #status {
       margin-top: 1rem;
       font-weight: bold;
@@ -31,12 +33,69 @@
 </head>
 <body>
   <h1>Upload Images</h1>
+  <form id="upload-form">
+    <input type="file" id="image-input" name="images" accept="image/*" multiple required />
+    <button type="submit">Upload</button>
+  </form>
 
-  <input type="file" id="fileInput" accept="image/png, image/jpeg" multiple>
-  <div id="preview"></div>
-  <button id="uploadBtn">Upload</button>
-  <p id="status"></p>
+  <div class="preview-grid" id="preview"></div>
+  <div id="status"></div>
 
-  <script src="upload.js"></script>
+  <script>
+    const form = document.getElementById("upload-form");
+    const input = document.getElementById("image-input");
+    const preview = document.getElementById("preview");
+    const status = document.getElementById("status");
+
+    // Preview selected images
+    input.addEventListener("change", () => {
+      preview.innerHTML = "";
+      const files = input.files;
+      if (!files.length) return;
+
+      Array.from(files).slice(0, 10).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = document.createElement("img");
+          img.src = e.target.result;
+          preview.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    // Upload handler
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const files = input.files;
+      if (!files.length) {
+        status.textContent = "Please select at least one image.";
+        return;
+      }
+
+      const formData = new FormData();
+      Array.from(files).slice(0, 10).forEach(file => {
+        formData.append("images", file);
+      });
+
+      status.textContent = "Uploading...";
+      try {
+        const res = await fetch("/.netlify/functions/upload-to-blobs", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          status.textContent = `Upload successful: ${data.uploaded.length} file(s).`;
+        } else {
+          status.textContent = `Upload failed: ${data.error || res.statusText}`;
+        }
+      } catch (err) {
+        console.error("Upload error", err);
+        status.textContent = "An unexpected error occurred during upload.";
+      }
+    });
+  </script>
 </body>
 </html>
