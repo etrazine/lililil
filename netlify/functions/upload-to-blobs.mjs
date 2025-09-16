@@ -1,6 +1,23 @@
-import { createBlobs } from "@netlify/blobs";
+// netlify/functions/upload-to-blobs.mjs
+import { set } from "@netlify/blobs";
 
-const blobs = createBlobs();
+// Helper: normalize filenames
+function normalizeBaseName(filename) {
+  return filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
+}
+
+// Helper: ISO timestamp (sortable, readable)
+function formatDate() {
+  const now = new Date();
+  return now.toISOString().replace(/[-:T]/g, '').slice(0, 15); // YYYYMMDDTHHmmss
+}
+
+// Helper: secure random suffix
+function generateSecureSuffix() {
+  const randomBytes = new Uint8Array(6);
+  (globalThis.crypto || require('crypto').webcrypto).getRandomValues(randomBytes);
+  return Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -22,44 +39,55 @@ export default async (req) => {
     }
 
     const formData = await req.formData();
-    const images = formData.getAll('images');
+    if (!formData.has('images')) {
+      return new Response(JSON.stringify({ error: "Expected form field 'images'" }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
+    }
 
-    if (!images || !images.length) {
+    const images = formData.getAll('images');
+    if (!images.length) {
       return new Response(JSON.stringify({ error: 'No images uploaded' }), {
         status: 400,
         headers: jsonHeaders,
       });
     }
 
-    const uploaded = [];
+    const results = await Promise.all(images.map(async (file) => {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const extension = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
+        const baseName = normalizeBaseName(file.name || 'upload');
+        const isoTime = formatDate();
+        const randomSuffix = generateSecureSuffix();
+        const uniqueFilename = `${baseName}-${isoTime}-${randomSuffix}${extension}`;
 
-    for (const file of images) {
-      // file is already a Blob/File in Edge Functions
-      // Generate a unique filename to avoid overwriting existing blobs
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).substring(2, 8);
-      const extension = file.name && file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : '';
-      const baseName = file.name ? file.name.replace(/\.[^/.]+$/, "") : 'upload';
-      const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
+        await set(uniqueFilename, arrayBuffer, {
+          metadata: { contentType: file.type },
+        });
 
-      await blobs.set(uniqueFilename, file, {
-        metadata: {
-          contentType: file.type,
-        },
-      });
+        return { file: file.name, storedAs: uniqueFilename };
+      } catch (err) {
+        return { file: file.name || 'unknown', error: err.message };
+      }
+    }));
 
-      uploaded.push(uniqueFilename);
-    }
+    const success = results.filter(r => !r.error);
+    const failed = results.filter(r => r.error);
 
-    return new Response(JSON.stringify({ uploaded }), {
-      status: 200,
+    return new Response(JSON.stringify({ success, failed }), {
+      status: failed.length ? 207 : 200, // 207 = Multi-Status
       headers: jsonHeaders,
     });
 
   } catch (err) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error("Blob upload error:", err);
-    }
+    console.error("Blob upload error:", {
+      error: err,
+      method: req.method,
+      headers: Object.fromEntries([...req.headers.entries()].map(([k, v]) => [k, k.toLowerCase().includes('auth') ? '[FILTERED]' : v])),
+      time: new Date().toISOString(),
+    });
     return new Response(
       JSON.stringify({ error: 'Upload failed', details: err?.message || String(err) }),
       {
