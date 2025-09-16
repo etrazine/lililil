@@ -1,6 +1,3 @@
-// File: netlify/functions/upload-to-blobs.js
-// Purpose: Handles image uploads and stores them in Netlify Blobs
-
 import { blobs } from '@netlify/blobs';
 
 export default async (req, context) => {
@@ -14,33 +11,48 @@ export default async (req, context) => {
   }
 
   try {
-    const formData = await req.formData();
-    const files = formData.getAll('images');
+    const contentType = req.headers.get('content-type') || '';
+    if (!contentType.includes('multipart/form-data')) {
+      return new Response(JSON.stringify({ error: 'Expected multipart/form-data' }), {
+        status: 400,
+        headers: jsonHeaders,
+      });
+    }
 
-    if (!files || files.length === 0) {
-      return new Response(JSON.stringify({ error: 'No images provided' }), {
+    const formData = await req.formData();
+    const images = formData.getAll('images');
+
+    if (!images || !images.length) {
+      return new Response(JSON.stringify({ error: 'No images uploaded' }), {
         status: 400,
         headers: jsonHeaders,
       });
     }
 
     const uploaded = [];
-    for (const file of files.slice(0, 10)) {
+
+    for (const file of images) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
+      const filename = file.name;
 
-      const key = file.name;
-      await blobs.set(key, buffer);
-      uploaded.push(key);
+      await blobs.set(filename, buffer, {
+        metadata: {
+          contentType: file.type,
+        }
+      });
+
+      uploaded.push(filename);
     }
 
     return new Response(JSON.stringify({ success: true, uploaded }), {
       status: 200,
       headers: jsonHeaders,
     });
+
   } catch (err) {
-    console.error('Upload error:', err);
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+    console.error("Blob upload error:", err);
+    return new Response(JSON.stringify({ error: 'Upload failed', details: err.message }), {
       status: 500,
       headers: jsonHeaders,
     });
