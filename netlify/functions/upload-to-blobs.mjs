@@ -1,4 +1,4 @@
-import { setBlob } from "@netlify/blobs";
+import blobs from "@netlify/blobs";
 
 export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -36,7 +36,7 @@ export default async (req) => {
       const buffer = Buffer.from(arrayBuffer);
       const filename = file.name;
 
-      await setBlob(filename, buffer, {
+      await blobs.set(filename, buffer, {
         metadata: {
           contentType: file.type,
         },
