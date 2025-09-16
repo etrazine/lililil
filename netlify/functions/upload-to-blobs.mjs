@@ -1,4 +1,4 @@
-import { setBlob } from "@netlify/blobs";
+import { blobs } from "@netlify/blobs";
 
 function normalizeBaseName(filename) {
   return filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
@@ -58,7 +58,7 @@ export default async (req) => {
       const extension = file.name?.match(/\.[^/.]+$/)?.[0] || '';
       const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
 
-      await setBlob(uniqueFilename, arrayBuffer, {
+      await blobs.set(uniqueFilename, arrayBuffer, {
         metadata: { contentType }
       });
 
