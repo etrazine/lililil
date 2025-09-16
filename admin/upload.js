@@ -1,46 +1,77 @@
-document.getElementById('imageInput').addEventListener('change', handleFiles);
-document.getElementById('uploadForm').addEventListener('submit', handleUpload);
+const fileInput = document.getElementById("fileInput");
+const preview = document.getElementById("preview");
+const uploadBtn = document.getElementById("uploadBtn");
+const statusMsg = document.getElementById("status");
 
-let selectedFiles = [];
+let filesToUpload = [];
 
-function handleFiles(event) {
-  const preview = document.getElementById('preview');
-  preview.innerHTML = '';
-  selectedFiles = Array.from(event.target.files).slice(0, 10); // max 10
+fileInput.addEventListener("change", () => {
+  preview.innerHTML = "";
+  filesToUpload = Array.from(fileInput.files).slice(0, 10); // limit to 10
 
-  selectedFiles.forEach(file => {
+  filesToUpload.forEach(file => {
     const reader = new FileReader();
     reader.onload = e => {
-      const img = document.createElement('img');
+      const img = document.createElement("img");
       img.src = e.target.result;
+      img.alt = file.name;
+      img.style.maxWidth = "100px";
+      img.style.margin = "0.5rem";
       preview.appendChild(img);
     };
     reader.readAsDataURL(file);
   });
-}
+});
 
-async function handleUpload(event) {
-  event.preventDefault();
-  const status = document.getElementById('status');
-  status.textContent = 'Uploading...';
+uploadBtn.addEventListener("click", async () => {
+  if (!filesToUpload.length) {
+    alert("Please select images to upload.");
+    return;
+  }
 
-  for (const file of selectedFiles) {
-    const arrayBuffer = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  statusMsg.textContent = "Uploading...";
 
-    const response = await fetch('/.netlify/functions/handle-blob-upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: file.name, content: base64 }),
-    });
+  for (const file of filesToUpload) {
+    try {
+      const reader = new FileReader();
 
-    if (!response.ok) {
-      status.textContent = `Failed to upload ${file.name}`;
+      await new Promise((resolve, reject) => {
+        reader.onload = async e => {
+          const base64Data = e.target.result.split(',')[1];
+
+          const response = await fetch("/.netlify/functions/handle-blob-upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              name: file.name,
+              content: base64Data
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Failed to upload ${file.name}:`, errorText);
+            reject(new Error(errorText));
+          } else {
+            const json = await response.json();
+            console.log(`Uploaded: ${json.filename}`);
+            resolve();
+          }
+        };
+
+        reader.onerror = err => reject(err);
+        reader.readAsDataURL(file);
+      });
+    } catch (err) {
+      console.error("Upload error", err);
+      statusMsg.textContent = `Error uploading ${file.name}: ${err.message}`;
       return;
     }
   }
 
-  status.textContent = 'All images uploaded successfully!';
-  document.getElementById('uploadForm').reset();
-  document.getElementById('preview').innerHTML = '';
-}
+  statusMsg.textContent = "Upload complete!";
+  fileInput.value = "";
+  preview.innerHTML = "";
+});

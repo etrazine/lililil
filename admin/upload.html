@@ -73,28 +73,42 @@
         return;
       }
 
-      const formData = new FormData();
-      Array.from(files).slice(0, 10).forEach(file => {
-        formData.append("images", file);
-      });
-
+      const uploaded = [];
       status.textContent = "Uploading...";
-      try {
-        const res = await fetch("/.netlify/functions/upload-to-blobs", {
-          method: "POST",
-          body: formData,
-        });
 
-        const data = await res.json();
-        if (res.ok) {
-          status.textContent = `Upload successful: ${data.uploaded.length} file(s).`;
-        } else {
-          status.textContent = `Upload failed: ${data.error || res.statusText}`;
+      for (const file of Array.from(files).slice(0, 10)) {
+        try {
+          const reader = new FileReader();
+          const result = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result.split(",")[1]); // base64
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          const res = await fetch("/.netlify/functions/handle-blob-upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: file.name, content: result })
+          });
+
+          const data = await res.json();
+          if (res.ok) {
+            uploaded.push(data.filename);
+          } else {
+            console.error("Upload failed", data);
+            status.textContent = `Upload failed: ${data.error || res.statusText}`;
+            return;
+          }
+        } catch (err) {
+          console.error("Upload error", err);
+          status.textContent = `Error uploading ${file.name}: ${err.message}`;
+          return;
         }
-      } catch (err) {
-        console.error("Upload error", err);
-        status.textContent = "An unexpected error occurred during upload.";
       }
+
+      status.textContent = `Upload complete: ${uploaded.length} file(s) uploaded.`;
+      form.reset();
+      preview.innerHTML = "";
     });
   </script>
 </body>

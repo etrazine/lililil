@@ -1,45 +1,48 @@
-// File: netlify/functions/upload-to-blobs.js
 import { blobs } from '@netlify/blobs';
 
-export default async (req, context) => {
+export default async (req) => {
   if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', {
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
       status: 405,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 
-  const contentType = req.headers.get('content-type') || '';
+  try {
+    const contentType = req.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return new Response(JSON.stringify({ error: 'Invalid Content-Type' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
-  if (!contentType.includes('multipart/form-data')) {
-    return new Response('Expected multipart/form-data', { status: 400 });
-  }
+    const { name, content } = await req.json();
 
-  const formData = await req.formData();
-  const files = formData.getAll('images');
+    if (!name || !content) {
+      return new Response(JSON.stringify({ error: 'Missing name or content' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
-  if (!files.length) {
-    return new Response('No files uploaded', { status: 400 });
-  }
+    const decoded = Buffer.from(content, 'base64');
 
-  const store = blobs.createStore('images'); // auto-creates store if not exists
-  const results = [];
-
-  for (const file of files) {
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const key = file.name;
-
-    await store.set(key, buffer, {
-      metadata: {
-        contentType: file.type || 'application/octet-stream',
-      },
+    const store = blobs({ provider: 'fs' }); // uses local fs for dev, Netlify Blobs in prod
+    await store.set(`images/${name}`, decoded, {
+      metadata: { uploaded: new Date().toISOString() }
     });
 
-    results.push({ filename: key });
-  }
+    return new Response(JSON.stringify({ success: true, filename: name }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
-  return new Response(JSON.stringify({ success: true, uploaded: results }), {
-    headers: { 'Content-Type': 'application/json' },
-    status: 200,
-  });
+  } catch (err) {
+    console.error('Upload error:', err);
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 };
