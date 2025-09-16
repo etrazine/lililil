@@ -1,4 +1,4 @@
-import { set } from "@netlify/blobs";
+import { setBlob } from "@netlify/blobs";
 
 export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -45,11 +45,7 @@ export default async (req) => {
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const filename = `${baseName}_${timestamp}${extension}`;
 
-          await set(filename, arrayBuffer, {
-            metadata: {
-              contentType: file.type,
-            },
-          });
+          await setBlob({ key: filename, body: arrayBuffer, metadata: { contentType: file.type } });
 
           return { status: 'fulfilled', filename };
         } catch (err) {
