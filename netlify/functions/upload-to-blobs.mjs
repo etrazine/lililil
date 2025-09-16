@@ -1,14 +1,4 @@
-import { blobs } from "@netlify/blobs";
-
-function normalizeBaseName(filename) {
-  return filename.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
-}
-
-function generateRandomSuffix() {
-  const randomBytes = new Uint8Array(6);
-  (globalThis.crypto || require('crypto').webcrypto).getRandomValues(randomBytes);
-  return Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+import { set } from "@netlify/blobs";
 
 export default async (req) => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -38,36 +28,40 @@ export default async (req) => {
       });
     }
 
-    const images = formData.getAll('images');
-    if (!images.length) {
-      return new Response(JSON.stringify({ error: "No files uploaded." }), {
+    const files = formData.getAll('images');
+    if (!files.length) {
+      return new Response(JSON.stringify({ error: 'No images uploaded' }), {
         status: 400,
         headers: jsonHeaders,
       });
     }
 
-    const uploaded = [];
+    const uploaded = await Promise.allSettled(
+      files.slice(0, 10).map(async (file) => {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
+          const baseName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9-_]/gi, '_');
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const filename = `${baseName}_${timestamp}${extension}`;
 
-    // Upload in parallel
-    const uploadPromises = images.map(async (file) => {
-      const arrayBuffer = await file.arrayBuffer();
-      const contentType = file.type;
-      const baseName = normalizeBaseName(file.name || `upload`);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const randomSuffix = generateRandomSuffix();
-      const extension = file.name?.match(/\.[^/.]+$/)?.[0] || '';
-      const uniqueFilename = `${baseName}_${timestamp}_${randomSuffix}${extension}`;
+          await set(filename, arrayBuffer, {
+            metadata: {
+              contentType: file.type,
+            },
+          });
 
-      await blobs.set(uniqueFilename, arrayBuffer, {
-        metadata: { contentType }
-      });
+          return { status: 'fulfilled', filename };
+        } catch (err) {
+          return { status: 'rejected', reason: err.message };
+        }
+      })
+    );
 
-      uploaded.push(uniqueFilename);
-    });
+    const success = uploaded.filter(u => u.status === 'fulfilled').map(u => u.filename);
+    const failed = uploaded.filter(u => u.status === 'rejected').map(u => u.reason);
 
-    await Promise.all(uploadPromises);
-
-    return new Response(JSON.stringify({ uploaded }), {
+    return new Response(JSON.stringify({ uploaded: success, errors: failed }), {
       status: 200,
       headers: jsonHeaders,
     });
@@ -80,10 +74,7 @@ export default async (req) => {
       time: new Date().toISOString(),
     });
 
-    return new Response(JSON.stringify({
-      error: 'Upload failed',
-      details: err?.message || String(err)
-    }), {
+    return new Response(JSON.stringify({ error: 'Upload failed', details: err.message }), {
       status: 500,
       headers: jsonHeaders,
     });
